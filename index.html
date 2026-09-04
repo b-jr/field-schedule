@@ -76,6 +76,11 @@
   .add{grid-column:1 / -1;background:var(--grass);color:#fff;border-radius:8px;padding:12px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:15px;font-weight:700}
   .add:active{background:var(--grass-dk)}
   .add[disabled]{opacity:.5;cursor:default}
+  .chkrow{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--mute);line-height:1.15;user-select:none;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .chkrow input{width:16px;height:16px;accent-color:var(--dirt)}
+  .tagc{display:inline-block;background:var(--dirt);color:#fff;font-size:9px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:1px 4px;margin-left:6px;vertical-align:1px}
+  .tagw{display:inline-block;background:#B3261E;color:#fff;font-size:9px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:1px 4px;margin-left:6px;vertical-align:1px}
+  .day .conf{font-size:9px;font-weight:700;color:#B3261E}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--grass-dk);color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:11}
   .toast.show{opacity:1}
   @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
@@ -122,7 +127,9 @@
     <div class="form">
       <input id="nameIn" placeholder="Name" autocomplete="off" autocapitalize="words">
       <input id="timeIn" placeholder="Time — e.g. 3:30pm" autocomplete="off">
-      <input id="noteIn" class="note" placeholder="Note (optional) — e.g. hitting clinic, cage 2" autocomplete="off">
+      <input id="locIn" placeholder="Location — e.g. cage 2" autocomplete="off">
+      <label class="chkrow"><input type="checkbox" id="coachChk">Coach priority</label>
+      <input id="noteIn" class="note" placeholder="Note (optional) — e.g. hitting clinic" autocomplete="off">
       <button class="add" id="addBtn">Add to this day</button>
     </div>
   </div>
@@ -171,6 +178,7 @@
     validation: {
       nameMaxLength: 100,
       timeMaxLength: 20,
+      locMaxLength: 40,
       noteMaxLength: 200
     },
     firebase: {
@@ -254,6 +262,23 @@
   }
   const byTime = (a, b) => timeMinutes(a.time) - timeMinutes(b.time);
 
+  /* ---------- CONFLICT DETECTION ----------
+     Two entries clash when they name the same location (case-insensitive,
+     so "Cage 2" = "cage 2") and their times fall within LESSON_MINUTES of
+     each other. Entries with no location or no parseable time can't be
+     checked. Warnings never block a save — the manager decides. */
+  const LESSON_MINUTES = 60;
+  const normLoc = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  function entriesConflict(a, b){
+    const la = normLoc(a.loc), lb = normLoc(b.loc);
+    if (!la || !lb || la !== lb) return false;
+    const ta = timeMinutes(a.time), tb = timeMinutes(b.time);
+    if (ta >= 1e5 - 1 || tb >= 1e5 - 1) return false;
+    return Math.abs(ta - tb) < LESSON_MINUTES;
+  }
+  const conflictsFor = (list, entry) => list.filter(x => x !== entry && entriesConflict(x, entry));
+  const dayHasConflict = list => list.some(e => conflictsFor(list, e).length > 0);
+
   /* ---------- STATE ---------- */
 
   let state = { entries: {}, people: [] };
@@ -268,11 +293,12 @@
 
   /* ---------- DATA VALIDATION ---------- */
 
-  function validateEntry(name, time, note) {
+  function validateEntry(name, time, note, loc) {
     if (!name || name.length === 0) return 'Name is required';
     if (name.length > CONFIG.validation.nameMaxLength) return `Name must be ${CONFIG.validation.nameMaxLength} characters or less`;
     if (time && time.length > CONFIG.validation.timeMaxLength) return `Time must be ${CONFIG.validation.timeMaxLength} characters or less`;
     if (note && note.length > CONFIG.validation.noteMaxLength) return `Note must be ${CONFIG.validation.noteMaxLength} characters or less`;
+    if (loc && loc.length > CONFIG.validation.locMaxLength) return `Location must be ${CONFIG.validation.locMaxLength} characters or less`;
     return null;
   }
 
@@ -315,6 +341,13 @@
       m.className='more';
       m.textContent='+'+(list.length-3)+' more';
       b.appendChild(m);
+    }
+
+    if (dayHasConflict(list)){
+      const w=document.createElement('span');
+      w.className='conf';
+      w.textContent='⚠ conflict';
+      b.appendChild(w);
     }
 
     b.onclick = () => openDay(k, date);
@@ -377,8 +410,10 @@
 
     list.forEach((e) => {
       const li = document.createElement('li');
+      const clash = conflictsFor(list, e).length > 0;
       li.innerHTML = '<span class="dot" style="background:'+colorFor(e.name)+'"></span><div class="who">'+esc(e.name)+
-        ((e.time||e.note)?'<small>'+esc([e.time,e.note].filter(Boolean).join(' · '))+'</small>':'')+'</div>';
+        (e.priority?'<span class="tagc">COACH</span>':'')+(clash?'<span class="tagw">⚠ OVERLAP</span>':'')+
+        ((e.time||e.loc||e.note)?'<small>'+esc([e.time,e.loc,e.note].filter(Boolean).join(' · '))+'</small>':'')+'</div>';
       const del = document.createElement('button');
       del.className='del';
       del.textContent='×';
@@ -396,7 +431,7 @@
       const b=document.createElement('button');
       b.style.background=p.color;
       b.textContent=p.name;
-      b.onclick = () => addEntry(p.name, $('timeIn').value.trim(), $('noteIn').value.trim());
+      b.onclick = () => { $('nameIn').value = p.name; $('nameIn').removeAttribute('aria-invalid'); $('timeIn').focus(); };
       q.appendChild(b);
     });
 
@@ -506,10 +541,14 @@
     return true;
   }
 
-  function addEntry(name, time, note){
+  function addEntry(){
     const nameEl = $('nameIn');
-    time = formatTime(time);                 // normalize to "H:MM AM/PM" before anything else
-    const error = validateEntry(name, time, note);
+    const name = $('nameIn').value.trim();
+    const note = $('noteIn').value.trim();
+    const loc  = $('locIn').value.trim();
+    const priority = $('coachChk').checked;
+    const time = formatTime($('timeIn').value.trim()); // normalize to "H:MM AM/PM"
+    const error = validateEntry(name, time, note, loc);
 
     if (error) {
       nameEl.setAttribute('aria-invalid', 'true');
@@ -522,7 +561,17 @@
 
     if (!uiState.selected || !guardSave()) return;
 
-    const entry = { name, time: time||'', note: note||'' };
+    const entry = { name, time: time||'', note: note||'', loc: loc||'', priority: !!priority };
+
+    // Conflict check — warn, don't block. Coach-priority bookings outrank lessons.
+    const clashes = conflictsFor(state.entries[uiState.selected] || [], entry);
+    if (clashes.length){
+      const c = clashes[0];
+      const msg = (c.priority && !priority)
+        ? ((c.loc||'That spot')+' is taken by '+c.name+' at '+(c.time||'an unlisted time')+' — COACH PRIORITY. Book anyway?')
+        : ((c.loc||'That spot')+' already has '+c.name+' at '+(c.time||'an unlisted time')+'. Double-book anyway?');
+      if (!window.confirm(msg)) return;
+    }
 
     // Optimistic update
     if (!state.entries[uiState.selected]) state.entries[uiState.selected] = [];
@@ -539,13 +588,15 @@
       $('nameIn').value='';
       $('timeIn').value='';
       $('noteIn').value='';
-      toast(name+' added'+(entry.time?' · '+entry.time:''));
+      $('locIn').value='';
+      $('coachChk').checked=false;
+      toast(name+' added'+(entry.time?' · '+entry.time:'')+(entry.loc?' · '+entry.loc:''));
       log('info', 'Entry added', { name, date: uiState.selected });
     }).catch(e => {
       log('error', 'Failed to add entry', { name, error: e });
       // Revert optimistic update
       if (state.entries[uiState.selected]) {
-        state.entries[uiState.selected] = state.entries[uiState.selected].filter(x => !(x.name === entry.name && x.time === entry.time && x.note === entry.note));
+        state.entries[uiState.selected] = state.entries[uiState.selected].filter(x => !(x.name === entry.name && x.time === entry.time && x.note === entry.note && (x.loc||'') === entry.loc));
         if (!state.entries[uiState.selected].length) delete state.entries[uiState.selected];
         renderSheet();
       }
@@ -559,14 +610,14 @@
     // Optimistic update
     if (state.entries[k]) {
       state.entries[k] = state.entries[k].filter(x =>
-        !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'')));
+        !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'') && (x.loc||'')===(entry.loc||'')));
       if (!state.entries[k].length) delete state.entries[k];
       renderSheet();
     }
 
     runTransaction(dayRef(k), current => {
       const list = asArray(current).filter(x =>
-        !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'')));
+        !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'') && (x.loc||'')===(entry.loc||'')));
       return list.length ? list : null;
     }).catch(e => {
       log('error', 'Failed to remove entry', { key: k, error: e });
@@ -597,7 +648,7 @@
 
   /* ---------- EVENT WIRING ---------- */
 
-  $('addBtn').onclick = () => addEntry($('nameIn').value.trim(), $('timeIn').value.trim(), $('noteIn').value.trim());
+  $('addBtn').onclick = () => addEntry();
   $('nameIn').addEventListener('keydown', e => { if(e.key==='Enter') $('addBtn').click(); });
   $('closeBtn').onclick = closeSheet;
   $('scrim').onclick = closeSheet;
