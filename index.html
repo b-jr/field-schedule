@@ -7,8 +7,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --chalk:#F3EFE4; --grass:#2E6B3F; --grass-dk:#1F4D2E; --dirt:#C0713A;
-    --ink:#1B1F1A; --mute:#7A7F76; --line:#DCD6C6; --card:#FFFDF8;
+    /* CSUF Titans: Titan Blue #00274C, Titan Orange #FF7900 */
+    --chalk:#F2F4F7; --grass:#00478F; --grass-dk:#00274C; --dirt:#FF7900;
+    --ink:#14202E; --mute:#64707E; --line:#D9DEE6; --card:#FFFFFF;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -16,15 +17,15 @@
   button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   input{font:inherit}
 
-  header{background:var(--grass-dk);color:var(--chalk);padding:14px 16px 12px;position:sticky;top:0;z-index:5}
-  .eyebrow{font-family:Oswald,"Arial Narrow",sans-serif;letter-spacing:.14em;text-transform:uppercase;font-size:11px;opacity:.75;display:flex;justify-content:space-between;align-items:center}
+  header{background:var(--grass-dk);color:#fff;padding:14px 16px 12px;position:sticky;top:0;z-index:5;border-bottom:3px solid var(--dirt)}
+  .eyebrow{font-family:Oswald,"Arial Narrow",sans-serif;letter-spacing:.14em;text-transform:uppercase;font-size:11px;opacity:.8;display:flex;justify-content:space-between;align-items:center}
   .status{font-size:10px;letter-spacing:.05em;text-transform:none;opacity:.85}
-  .status.err{color:#F3B8A8;opacity:1}
+  .status.err{color:#FFB199;opacity:1}
   .monthrow{display:flex;align-items:center;justify-content:space-between;margin-top:2px}
   .month{font-family:Oswald,"Arial Narrow",sans-serif;font-weight:700;font-size:30px;line-height:1;text-transform:uppercase;letter-spacing:.02em}
   .nav{display:flex;gap:6px}
-  .nav button{width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.12);font-size:20px;line-height:1}
-  .nav button:active{background:rgba(255,255,255,.25)}
+  .nav button{width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.14);font-size:20px;line-height:1}
+  .nav button:active{background:rgba(255,255,255,.28)}
   .today-btn{font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:12px;padding:0 10px;width:auto!important}
 
   .banner{display:none;background:#8A3A2C;color:#fff;font-size:13px;line-height:1.4;padding:10px 16px}
@@ -34,21 +35,21 @@
   .dow{text-align:center;font-family:Oswald,sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);padding:4px 0 6px}
   .day{background:var(--card);border:1px solid var(--line);border-radius:6px;min-height:82px;padding:4px 3px 3px;text-align:left;display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden}
   .day.pad{background:transparent;border-color:transparent}
-  .day:active{background:#F7F1E2}
+  .day:active{background:#EAF0F8}
   .day .num{font-family:Oswald,sans-serif;font-size:13px;font-weight:500;color:var(--mute);line-height:1}
   .day.today .num{color:#fff;background:var(--dirt);border-radius:999px;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
   .day.has{border-color:var(--grass)}
   .chip{font-size:10px;font-weight:600;line-height:1.15;padding:2px 4px;border-radius:3px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .more{font-size:10px;color:var(--mute);font-weight:600}
-  .day.weekend{background:#FBF8F0}
+  .day.weekend{background:#F6F8FB}
 
-  .scrim{position:fixed;inset:0;background:rgba(27,31,26,.45);opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
+  .scrim{position:fixed;inset:0;background:rgba(0,23,45,.5);opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
   .scrim.open{opacity:1;pointer-events:auto}
   .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);z-index:10;max-height:85vh}
   .sheet.open{transform:translateY(0)}
   .handle{width:40px;height:4px;background:var(--line);border-radius:2px;margin:10px auto 6px}
-  .sheet-head{padding:4px 18px 10px;border-bottom:2px solid var(--grass);display:flex;align-items:baseline;justify-content:space-between}
-  .sheet-title{font-family:Oswald,sans-serif;font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.02em}
+  .sheet-head{padding:4px 18px 10px;border-bottom:2px solid var(--dirt);display:flex;align-items:baseline;justify-content:space-between}
+  .sheet-title{font-family:Oswald,sans-serif;font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.02em;color:var(--grass-dk)}
   .sheet-sub{font-size:12px;color:var(--mute)}
   .close{font-size:22px;color:var(--mute);padding:4px 6px}
   .sheet-body{overflow:auto;padding:12px 18px 24px}
@@ -75,7 +76,7 @@
   .add{grid-column:1 / -1;background:var(--grass);color:#fff;border-radius:8px;padding:12px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:15px;font-weight:700}
   .add:active{background:var(--grass-dk)}
   .add[disabled]{opacity:.5;cursor:default}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--ink);color:var(--chalk);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:11}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--grass-dk);color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:11}
   .toast.show{opacity:1}
   @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
 </style>
@@ -120,7 +121,7 @@
 
     <div class="form">
       <input id="nameIn" placeholder="Name" autocomplete="off" autocapitalize="words">
-      <input id="timeIn" placeholder="Time" autocomplete="off">
+      <input id="timeIn" placeholder="Time — e.g. 3:30pm" autocomplete="off">
       <input id="noteIn" class="note" placeholder="Note (optional) — e.g. hitting clinic, cage 2" autocomplete="off">
       <button class="add" id="addBtn">Add to this day</button>
     </div>
@@ -131,7 +132,7 @@
 <!-- =========================== FIREBASE SETUP ===========================
 1. https://console.firebase.google.com → create a free project.
 2. Add a Web app (</> icon) → copy the firebaseConfig values into
-   FIREBASE_CONFIG below (or set as environment variables).
+   CONFIG.firebase below.
 3. Build → Realtime Database → Create Database (any region, test mode is
    fine to start — but then do step 4, because TEST MODE EXPIRES IN ~30
    DAYS and the calendar will stop saving).
@@ -161,9 +162,10 @@
 ====================================================================== -->
 <script type="module">
   /* ---------- CONFIGURATION ---------- */
-  
+
   const CONFIG = {
-    colors: ['#2E6B3F','#C0713A','#3B5BA5','#8A3B6B','#B8860B','#2A8C8C','#A33A3A','#5C6B2E','#6B4E9B','#B05A3C'],
+    /* Chip colors — first two are Titan Blue and Titan Orange, rest chosen to stay legible with white text */
+    colors: ['#00478F','#E56A00','#00274C','#8A3B6B','#2A8C8C','#5C6B2E','#A33A3A','#6B4E9B','#B8860B','#3B5BA5'],
     months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
     daysOfWeek: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     validation: {
@@ -207,6 +209,50 @@
     clearTimeout(toastTimeout);
     toastTimeout=setTimeout(()=>t.classList.remove('show'),1600);
   };
+
+  /* ---------- TIME FORMATTING ----------
+     Everything typed into the Time box is normalized to "H:MM AM/PM".
+     Accepted: "3", "3pm", "3:30", "3:30 pm", "15:00", "12a", "12.30pm".
+     Bare numbers with no am/pm are guessed: 1–7 → PM, 8–11 → AM, 12 → PM
+     (lesson hours). Typing am/pm always wins over the guess.
+     Unrecognized text (e.g. "after practice") is kept as typed. */
+
+  function formatTime(raw){
+    if (!raw) return '';
+    const s = String(raw).trim().toLowerCase().replace(/\./g, ':').replace(/\s+/g, '');
+    const m = s.match(/^(\d{1,2})(?::(\d{2}))?(a|am|p|pm)?$/);
+    if (!m) return String(raw).trim();
+    let h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    let ap = m[3] ? (m[3][0] === 'p' ? 'PM' : 'AM') : null;
+    if (min > 59 || h > 23) return String(raw).trim();
+    if (ap === null) {
+      if (h === 0) { h = 12; ap = 'AM'; }
+      else if (h > 12) { h -= 12; ap = 'PM'; }          // 24-hour input like 15:00
+      else if (h === 12) { ap = 'PM'; }
+      else if (h >= 8 && h <= 11) { ap = 'AM'; }        // morning lessons
+      else { ap = 'PM'; }                                // 1–7 → afternoon/evening
+    } else {
+      if (h === 0) h = 12;
+      if (h > 12) return String(raw).trim();            // "15pm" makes no sense
+    }
+    return h + ':' + String(min).padStart(2, '0') + ' ' + ap;
+  }
+
+  /* Minutes since midnight, for sorting. Untimed entries sort last;
+     unparseable text sorts just before them. */
+  function timeMinutes(t){
+    if (!t) return 1e5;
+    const m = String(t).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+    if (!m) return 1e5 - 1;
+    let h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    const ap = m[3] ? m[3].toLowerCase() : null;
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    return h * 60 + min;
+  }
+  const byTime = (a, b) => timeMinutes(a.time) - timeMinutes(b.time);
 
   /* ---------- STATE ---------- */
 
@@ -255,7 +301,7 @@
     b.className = 'day'+(k===todayKey?' today':'')+(list.length?' has':'')+((date.getDay()===0||date.getDay()===6)?' weekend':'');
     b.setAttribute('aria-label', CONFIG.months[date.getMonth()]+' '+d);
     b.innerHTML = '<span class="num">'+d+'</span>';
-    
+
     list.slice(0,3).forEach(e => {
       const c=document.createElement('span');
       c.className='chip';
@@ -263,14 +309,14 @@
       c.textContent=(e.time?e.time+' ':'')+e.name.split(' ')[0];
       b.appendChild(c);
     });
-    
+
     if (list.length>3){
       const m=document.createElement('span');
       m.className='more';
       m.textContent='+'+(list.length-3)+' more';
       b.appendChild(m);
     }
-    
+
     b.onclick = () => openDay(k, date);
     return b;
   }
@@ -280,27 +326,27 @@
     $('monthLabel').textContent = CONFIG.months[uiState.view.getMonth()]+' '+uiState.view.getFullYear();
     const g = $('grid');
     g.innerHTML = '';
-    
+
     CONFIG.daysOfWeek.forEach(d => {
       const el=document.createElement('div');
       el.className='dow';
       el.textContent=d;
       g.appendChild(el);
     });
-    
+
     const first = new Date(uiState.view.getFullYear(), uiState.view.getMonth(), 1);
     const days = new Date(uiState.view.getFullYear(), uiState.view.getMonth()+1, 0).getDate();
-    
+
     for (let i=0;i<first.getDay();i++){
       const p=document.createElement('div');
       p.className='day pad';
       g.appendChild(p);
     }
-    
+
     for (let d=1; d<=days; d++){
       const date = new Date(uiState.view.getFullYear(), uiState.view.getMonth(), d);
       const k = iso(date);
-      const list = state.entries[k] || [];
+      const list = (state.entries[k] || []).slice().sort(byTime);
       const dayEl = createDayElement(d, date, k, list);
       uiState.dayElementCache.set(k, dayEl);
       g.appendChild(dayEl);
@@ -325,10 +371,10 @@
   }
 
   function renderSheet(){
-    const list = state.entries[uiState.selected] || [];
+    const list = (state.entries[uiState.selected] || []).slice().sort(byTime);
     const ul = $('lineup');
     ul.innerHTML='';
-    
+
     list.forEach((e) => {
       const li = document.createElement('li');
       li.innerHTML = '<span class="dot" style="background:'+colorFor(e.name)+'"></span><div class="who">'+esc(e.name)+
@@ -341,7 +387,7 @@
       li.appendChild(del);
       ul.appendChild(li);
     });
-    
+
     $('emptyMsg').style.display = list.length ? 'none' : 'block';
 
     const q = $('quick');
@@ -353,7 +399,7 @@
       b.onclick = () => addEntry(p.name, $('timeIn').value.trim(), $('noteIn').value.trim());
       q.appendChild(b);
     });
-    
+
     if (state.people.length){
       const x=document.createElement('button');
       x.className='x';
@@ -370,28 +416,40 @@
 
   render();
 
-  /* Midnight rollover: re-render when tab regains focus if date changed */
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && iso(new Date()) !== todayKey) {
-      log('info', 'Date changed on refocus, re-rendering');
-      render();
-    }
-  });
+  /* ---------- DATE ROLLOVER ----------
+     The calendar always opens on the real current month (uiState.view
+     starts from new Date()). This handler covers tabs that stay open:
+     when the date changes, the "today" ring moves, and — if you were
+     looking at the month that just ended — the view follows into the
+     new month automatically. If you had navigated somewhere else (say,
+     planning next month), it leaves your view alone. */
 
-  window.addEventListener('focus', () => {
-    if (iso(new Date()) !== todayKey) {
-      log('info', 'Date changed on window focus, re-rendering');
-      render();
+  function handleDateRollover(){
+    const now = new Date();
+    if (iso(now) === todayKey) return;
+    const oldYear = parseInt(todayKey.slice(0,4), 10);
+    const oldMonth = parseInt(todayKey.slice(5,7), 10) - 1;
+    const wasViewingCurrentMonth =
+      uiState.view.getFullYear() === oldYear && uiState.view.getMonth() === oldMonth;
+    if (wasViewingCurrentMonth &&
+        (now.getMonth() !== oldMonth || now.getFullYear() !== oldYear)) {
+      uiState.view = new Date(now.getFullYear(), now.getMonth(), 1);
+      log('info', 'Month rolled over, following to new month');
     }
-  });
+    render();
+  }
+
+  setInterval(handleDateRollover, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) handleDateRollover(); });
+  window.addEventListener('focus', handleDateRollover);
 
   /* ---------- FIREBASE ---------- */
 
   let dayRef = null, peopleRef = null, runTransaction = null;
 
-  if (Object.values(CONFIG.firebase).some(v => typeof v === 'string' && v.startsWith('VITE_'))) {
+  if (Object.values(CONFIG.firebase).some(v => typeof v === 'string' && (v.startsWith('VITE_') || v.startsWith('YOUR_')))) {
     setStatus('not configured', true);
-    showBanner('Firebase config is missing — the calendar will display but nothing will save. Set environment variables or update FIREBASE_CONFIG.');
+    showBanner('Firebase config is missing — the calendar will display but nothing will save. Update CONFIG.firebase.');
     log('error', 'Firebase config incomplete');
   } else {
     initFirebase();
@@ -450,8 +508,9 @@
 
   function addEntry(name, time, note){
     const nameEl = $('nameIn');
+    time = formatTime(time);                 // normalize to "H:MM AM/PM" before anything else
     const error = validateEntry(name, time, note);
-    
+
     if (error) {
       nameEl.setAttribute('aria-invalid', 'true');
       nameEl.focus();
@@ -464,25 +523,23 @@
     if (!uiState.selected || !guardSave()) return;
 
     const entry = { name, time: time||'', note: note||'' };
-    
+
     // Optimistic update
     if (!state.entries[uiState.selected]) state.entries[uiState.selected] = [];
     state.entries[uiState.selected].push(entry);
     renderSheet();
-    
+
     ensurePerson(name);
     runTransaction(dayRef(uiState.selected), current => {
       const list = asArray(current);
-      if (!list.some(x => x === entry)) {
-        list.push(entry);
-      }
-      list.sort((a,b) => (a.time||'zz').localeCompare(b.time||'zz'));
+      list.push(entry);
+      list.sort(byTime);
       return list;
     }).then(() => {
       $('nameIn').value='';
       $('timeIn').value='';
       $('noteIn').value='';
-      toast(name+' added');
+      toast(name+' added'+(entry.time?' · '+entry.time:''));
       log('info', 'Entry added', { name, date: uiState.selected });
     }).catch(e => {
       log('error', 'Failed to add entry', { name, error: e });
@@ -498,7 +555,7 @@
 
   function removeEntry(k, entry){
     if (!guardSave()) return;
-    
+
     // Optimistic update
     if (state.entries[k]) {
       state.entries[k] = state.entries[k].filter(x =>
@@ -506,7 +563,7 @@
       if (!state.entries[k].length) delete state.entries[k];
       renderSheet();
     }
-    
+
     runTransaction(dayRef(k), current => {
       const list = asArray(current).filter(x =>
         !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'')));
@@ -514,7 +571,6 @@
     }).catch(e => {
       log('error', 'Failed to remove entry', { key: k, error: e });
       toast('Could not remove — try again');
-      // Refresh sheet to restore removed item
       renderSheet();
     });
   }
