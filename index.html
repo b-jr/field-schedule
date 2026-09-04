@@ -69,9 +69,10 @@
   .quick .x{background:none;color:var(--mute);font-weight:500;padding:7px 4px;font-size:12px}
 
   .form{display:grid;grid-template-columns:1fr 92px;gap:6px;align-items:stretch}
-  .form input{border:1px solid var(--line);border-radius:8px;padding:11px 12px;background:#fff;font-size:15px;min-width:0}
-  .form input:focus{outline:2px solid var(--grass);outline-offset:0;border-color:var(--grass)}
-  .form input[aria-invalid="true"]{border-color:#F3B8A8;outline-color:#F3B8A8}
+  .form input,.form select{border:1px solid var(--line);border-radius:8px;padding:11px 12px;background:#fff;font-size:15px;min-width:0;color:var(--ink)}
+  .form select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364707E'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+  .form input:focus,.form select:focus{outline:2px solid var(--grass);outline-offset:0;border-color:var(--grass)}
+  .form input[aria-invalid="true"],.form select[aria-invalid="true"]{border-color:#F3B8A8;outline-color:#F3B8A8}
   .form .note{grid-column:1 / -1}
   .add{grid-column:1 / -1;background:var(--grass);color:#fff;border-radius:8px;padding:12px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:15px;font-weight:700}
   .add:active{background:var(--grass-dk)}
@@ -81,6 +82,10 @@
   .tagc{display:inline-block;background:var(--dirt);color:#fff;font-size:9px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:1px 4px;margin-left:6px;vertical-align:1px}
   .tagw{display:inline-block;background:#B3261E;color:#fff;font-size:9px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:1px 4px;margin-left:6px;vertical-align:1px}
   .day .conf{font-size:9px;font-weight:700;color:#B3261E}
+  .tagp{display:inline-block;background:#E9C46A;color:#4A3A00;font-size:9px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:1px 4px;margin-left:6px;vertical-align:1px}
+  .ok{width:34px;height:34px;flex:none;border-radius:50%;background:var(--grass);color:#fff;font-size:16px;font-weight:700;line-height:1}
+  .ok:active{background:var(--grass-dk)}
+  .chip.pend{opacity:.55;outline:1px dashed rgba(255,255,255,.9);outline-offset:-1px}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--grass-dk);color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:11}
   .toast.show{opacity:1}
   @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
@@ -127,7 +132,7 @@
     <div class="form">
       <input id="nameIn" placeholder="Name" autocomplete="off" autocapitalize="words">
       <input id="timeIn" placeholder="Time — e.g. 3:30pm" autocomplete="off">
-      <input id="locIn" placeholder="Location — e.g. cage 2" autocomplete="off">
+      <select id="locIn" aria-label="Location"></select>
       <label class="chkrow"><input type="checkbox" id="coachChk">Coach priority</label>
       <input id="noteIn" class="note" placeholder="Note (optional) — e.g. hitting clinic" autocomplete="off">
       <button class="add" id="addBtn">Add to this day</button>
@@ -175,6 +180,21 @@
     colors: ['#00478F','#E56A00','#00274C','#8A3B6B','#2A8C8C','#5C6B2E','#A33A3A','#6B4E9B','#B8860B','#3B5BA5'],
     months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
     daysOfWeek: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    /* The facility: 2 fields, 4 cages, and the main field's bullpen.
+       Rename labels to what everyone actually calls them — aliases are the
+       other things people type/typed, so old free-text entries still match.
+       "within" means the spot lives inside another (booking the whole main
+       field also occupies its bullpen — that counts as a conflict). */
+    locations: [
+      { id:'field-1',     label:'Main Field',   aliases:['field 1','f1','main','main field','stadium','big field'] },
+      { id:'field-1-pen', label:'Main Bullpen', within:'field-1',
+                          aliases:['bullpen','bull pen','pen','main pen','main bullpen','field 1 bullpen'] },
+      { id:'field-2',     label:'Field 2',      aliases:['f2','field 2','back field','second field'] },
+      { id:'cage-1',      label:'Cage 1',       aliases:['c1','cage1'] },
+      { id:'cage-2',      label:'Cage 2',       aliases:['c2','cage2'] },
+      { id:'cage-3',      label:'Cage 3',       aliases:['c3','cage3'] },
+      { id:'cage-4',      label:'Cage 4',       aliases:['c4','cage4'] }
+    ],
     validation: {
       nameMaxLength: 100,
       timeMaxLength: 20,
@@ -269,14 +289,61 @@
      checked. Warnings never block a save — the manager decides. */
   const LESSON_MINUTES = 60;
   const normLoc = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  /* Smart location matching: map whatever was typed or stored — "c2",
+     "cage2", "bull pen", old free-text entries — onto the facility's
+     defined spots. Unrecognized text stays as-is and only matches itself. */
+  function resolveLoc(text){
+    const n = normLoc(text);
+    if (!n) return null;
+    for (const l of CONFIG.locations){
+      if (n === l.id || n === normLoc(l.label) || l.aliases.some(a => normLoc(a) === n)) return l;
+    }
+    let m = n.match(/^c(?:age)?\s*#?\s*([0-9]+)$/);
+    if (m) return CONFIG.locations.find(l => l.id === 'cage-'+m[1]) || null;
+    m = n.match(/^f(?:ield)?\s*#?\s*([0-9]+)$/);
+    if (m) return CONFIG.locations.find(l => l.id === 'field-'+m[1]) || null;
+    return null;
+  }
+  const sameOrNested = (a, b) => a.id === b.id || a.within === b.id || b.within === a.id;
+
+  function populateLocations(){
+    const sel = $('locIn');
+    sel.innerHTML = '<option value="">Location…</option>' +
+      CONFIG.locations.map(l => '<option value="'+l.id+'">'+esc(l.label)+'</option>').join('') +
+      '<option value="__other">Other…</option>';
+    sel.onchange = () => {
+      if (sel.value !== '__other') return;
+      const t = prompt('Where? (type the location)');
+      if (t && t.trim()){
+        const o = document.createElement('option');
+        o.value = 'custom:' + t.trim();
+        o.textContent = t.trim();
+        sel.insertBefore(o, sel.lastElementChild);
+        sel.value = o.value;
+      } else {
+        sel.value = '';
+      }
+    };
+  }
+  populateLocations();
   function entriesConflict(a, b){
-    const la = normLoc(a.loc), lb = normLoc(b.loc);
-    if (!la || !lb || la !== lb) return false;
+    const ra = resolveLoc(a.loc), rb = resolveLoc(b.loc);
+    if (ra && rb){
+      if (!sameOrNested(ra, rb)) return false;      // two different defined spots — no clash
+    } else {
+      const la = normLoc(a.loc), lb = normLoc(b.loc);
+      if (la && lb && la !== lb) return false;      // unrecognized text only matches itself
+    }
+    // Same spot (or a location missing on older entries): times decide.
     const ta = timeMinutes(a.time), tb = timeMinutes(b.time);
     if (ta >= 1e5 - 1 || tb >= 1e5 - 1) return false;
     return Math.abs(ta - tb) < LESSON_MINUTES;
   }
   const conflictsFor = (list, entry) => list.filter(x => x !== entry && entriesConflict(x, entry));
+  const isPending = e => e && e.status === 'pending';   // no status (older entries) = confirmed
+  const matchEntry = (x, e) =>
+    x.name===e.name && (x.time||'')===(e.time||'') && (x.note||'')===(e.note||'') && (x.loc||'')===(e.loc||'');
   const dayHasConflict = list => list.some(e => conflictsFor(list, e).length > 0);
 
   /* ---------- STATE ---------- */
@@ -294,11 +361,13 @@
   /* ---------- DATA VALIDATION ---------- */
 
   function validateEntry(name, time, note, loc) {
-    if (!name || name.length === 0) return 'Name is required';
-    if (name.length > CONFIG.validation.nameMaxLength) return `Name must be ${CONFIG.validation.nameMaxLength} characters or less`;
-    if (time && time.length > CONFIG.validation.timeMaxLength) return `Time must be ${CONFIG.validation.timeMaxLength} characters or less`;
-    if (note && note.length > CONFIG.validation.noteMaxLength) return `Note must be ${CONFIG.validation.noteMaxLength} characters or less`;
-    if (loc && loc.length > CONFIG.validation.locMaxLength) return `Location must be ${CONFIG.validation.locMaxLength} characters or less`;
+    if (!name) return { field:'nameIn', msg:'Name is required' };
+    if (name.length > CONFIG.validation.nameMaxLength) return { field:'nameIn', msg:`Name must be ${CONFIG.validation.nameMaxLength} characters or less` };
+    if (!time) return { field:'timeIn', msg:'Time is required — e.g. 3:30pm' };
+    if (time.length > CONFIG.validation.timeMaxLength) return { field:'timeIn', msg:`Time must be ${CONFIG.validation.timeMaxLength} characters or less` };
+    if (!loc) return { field:'locIn', msg:'Location is required — e.g. cage 2' };
+    if (loc.length > CONFIG.validation.locMaxLength) return { field:'locIn', msg:`Location must be ${CONFIG.validation.locMaxLength} characters or less` };
+    if (note && note.length > CONFIG.validation.noteMaxLength) return { field:'noteIn', msg:`Note must be ${CONFIG.validation.noteMaxLength} characters or less` };
     return null;
   }
 
@@ -330,7 +399,7 @@
 
     list.slice(0,3).forEach(e => {
       const c=document.createElement('span');
-      c.className='chip';
+      c.className='chip'+(isPending(e)?' pend':'');
       c.style.background=colorFor(e.name);
       c.textContent=(e.time?e.time+' ':'')+e.name.split(' ')[0];
       b.appendChild(c);
@@ -412,13 +481,21 @@
       const li = document.createElement('li');
       const clash = conflictsFor(list, e).length > 0;
       li.innerHTML = '<span class="dot" style="background:'+colorFor(e.name)+'"></span><div class="who">'+esc(e.name)+
-        (e.priority?'<span class="tagc">COACH</span>':'')+(clash?'<span class="tagw">⚠ OVERLAP</span>':'')+
+        (e.priority?'<span class="tagc">COACH</span>':'')+(isPending(e)?'<span class="tagp">PENDING</span>':'')+(clash?'<span class="tagw">⚠ OVERLAP</span>':'')+
         ((e.time||e.loc||e.note)?'<small>'+esc([e.time,e.loc,e.note].filter(Boolean).join(' · '))+'</small>':'')+'</div>';
       const del = document.createElement('button');
       del.className='del';
       del.textContent='×';
       del.setAttribute('aria-label','Remove '+e.name);
       del.onclick = () => removeEntry(uiState.selected, e);
+      if (isPending(e)){
+        const ok = document.createElement('button');
+        ok.className='ok';
+        ok.textContent='✓';
+        ok.setAttribute('aria-label','Confirm '+e.name);
+        ok.onclick = () => confirmEntry(uiState.selected, e);
+        li.appendChild(ok);
+      }
       li.appendChild(del);
       ul.appendChild(li);
     });
@@ -542,46 +619,68 @@
   }
 
   function addEntry(){
-    const nameEl = $('nameIn');
     const name = $('nameIn').value.trim();
     const note = $('noteIn').value.trim();
-    const loc  = $('locIn').value.trim();
+    const rawLoc = $('locIn').value;
+    const loc = !rawLoc ? '' :
+      (rawLoc.startsWith('custom:') ? rawLoc.slice(7) :
+       (CONFIG.locations.find(l => l.id === rawLoc) || {label:rawLoc}).label);
     const priority = $('coachChk').checked;
     const time = formatTime($('timeIn').value.trim()); // normalize to "H:MM AM/PM"
     const error = validateEntry(name, time, note, loc);
 
+    ['nameIn','timeIn','locIn','noteIn'].forEach(id => $(id).removeAttribute('aria-invalid'));
     if (error) {
-      nameEl.setAttribute('aria-invalid', 'true');
-      nameEl.focus();
-      toast(error);
-      log('warn', 'Validation failed', { name, time, note, error });
+      const bad = $(error.field);
+      bad.setAttribute('aria-invalid', 'true');
+      bad.focus();
+      toast(error.msg);
+      log('warn', 'Validation failed', { name, time, error: error.msg });
       return;
     }
-    nameEl.removeAttribute('aria-invalid');
 
     if (!uiState.selected || !guardSave()) return;
 
-    const entry = { name, time: time||'', note: note||'', loc: loc||'', priority: !!priority };
+    const entry = { name, time: time||'', note: note||'', loc: loc||'', priority: !!priority,
+                    status: priority ? 'confirmed' : 'pending' };
 
-    // Conflict check — warn, don't block. Coach-priority bookings outrank lessons.
+    // Conflict check — warn, don't block. Coach priority outranks lessons and
+    // bumps them back to pending; coach-vs-coach is warned but never auto-bumped.
     const clashes = conflictsFor(state.entries[uiState.selected] || [], entry);
     if (clashes.length){
       const c = clashes[0];
-      const msg = (c.priority && !priority)
-        ? ((c.loc||'That spot')+' is taken by '+c.name+' at '+(c.time||'an unlisted time')+' — COACH PRIORITY. Book anyway?')
-        : ((c.loc||'That spot')+' already has '+c.name+' at '+(c.time||'an unlisted time')+'. Double-book anyway?');
+      let msg;
+      if (priority && !c.priority){
+        msg = 'COACH PRIORITY: this bumps '+c.name+"'s "+(c.time||'')+' booking'+(c.loc?' at '+c.loc:'')+' back to pending. Continue?';
+      } else if (priority && c.priority){
+        msg = 'Another coach ('+c.name+') has '+(c.loc||'this spot')+' at '+(c.time||'an unlisted time')+'. Book anyway?';
+      } else if (c.priority){
+        msg = (c.loc||'That spot')+' is taken by '+c.name+' at '+(c.time||'an unlisted time')+' — COACH PRIORITY. Book anyway?';
+      } else {
+        msg = (c.loc||'That spot')+' already has '+c.name+' at '+(c.time||'an unlisted time')+'. Double-book anyway?';
+      }
       if (!window.confirm(msg)) return;
     }
 
     // Optimistic update
     if (!state.entries[uiState.selected]) state.entries[uiState.selected] = [];
     state.entries[uiState.selected].push(entry);
+    if (entry.priority){
+      state.entries[uiState.selected].forEach(x => {
+        if (x !== entry && !x.priority && entriesConflict(x, entry)) x.status = 'pending';
+      });
+    }
     renderSheet();
 
     ensurePerson(name);
     runTransaction(dayRef(uiState.selected), current => {
       const list = asArray(current);
       list.push(entry);
+      if (entry.priority){
+        list.forEach(x => {
+          if (x !== entry && !x.priority && entriesConflict(x, entry)) x.status = 'pending';
+        });
+      }
       list.sort(byTime);
       return list;
     }).then(() => {
@@ -590,7 +689,7 @@
       $('noteIn').value='';
       $('locIn').value='';
       $('coachChk').checked=false;
-      toast(name+' added'+(entry.time?' · '+entry.time:'')+(entry.loc?' · '+entry.loc:''));
+      toast(name+' added'+(entry.priority?'':' — pending confirmation'));
       log('info', 'Entry added', { name, date: uiState.selected });
     }).catch(e => {
       log('error', 'Failed to add entry', { name, error: e });
@@ -601,6 +700,24 @@
         renderSheet();
       }
       toast('Could not save — try again');
+    });
+  }
+
+  function confirmEntry(k, entry){
+    if (!guardSave()) return;
+    // Optimistic
+    (state.entries[k] || []).forEach(x => { if (matchEntry(x, entry)) x.status = 'confirmed'; });
+    renderSheet(); render();
+    runTransaction(dayRef(k), current => {
+      const list = asArray(current);
+      list.forEach(x => { if (matchEntry(x, entry)) x.status = 'confirmed'; });
+      return list;
+    }).then(() => {
+      toast(entry.name+' confirmed');
+      log('info', 'Entry confirmed', { name: entry.name, date: k });
+    }).catch(e => {
+      log('error', 'Failed to confirm entry', { key: k, error: e });
+      toast('Could not confirm — try again');
     });
   }
 
