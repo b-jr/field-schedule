@@ -20,6 +20,8 @@
   header{background:var(--grass-dk);color:#fff;padding:14px 16px 12px;position:sticky;top:0;z-index:5;border-bottom:3px solid var(--dirt)}
   .eyebrow{font-family:Oswald,"Arial Narrow",sans-serif;letter-spacing:.14em;text-transform:uppercase;font-size:11px;opacity:.8;display:flex;justify-content:space-between;align-items:center}
   .status{font-size:10px;letter-spacing:.05em;text-transform:none;opacity:.85}
+  .pbadge{display:none;background:#E9C46A;color:#4A3A00;font-size:10px;font-weight:700;letter-spacing:.04em;border-radius:999px;padding:2px 8px;margin-left:auto;margin-right:8px}
+  .pbadge.show{display:inline-block}
   .status.err{color:#FFB199;opacity:1}
   .monthrow{display:flex;align-items:center;justify-content:space-between;margin-top:2px}
   .month{font-family:Oswald,"Arial Narrow",sans-serif;font-weight:700;font-size:30px;line-height:1;text-transform:uppercase;letter-spacing:.02em}
@@ -96,6 +98,7 @@
 <header>
   <div class="eyebrow">
     <span>Who's on the field</span>
+    <span class="pbadge" id="pendingBadge"></span>
     <span class="status" id="status">connecting…</span>
   </div>
   <div class="monthrow">
@@ -425,6 +428,10 @@
 
   function render(){
     todayKey = iso(new Date());
+    const pend = Object.values(state.entries).reduce((n, l) => n + l.filter(isPending).length, 0);
+    const pb = $('pendingBadge');
+    pb.textContent = pend ? (pend + ' pending') : '';
+    pb.classList.toggle('show', pend > 0);
     $('monthLabel').textContent = CONFIG.months[uiState.view.getMonth()]+' '+uiState.view.getFullYear();
     const g = $('grid');
     g.innerHTML = '';
