@@ -70,7 +70,7 @@
   .quick button:active{filter:brightness(.85)}
   .quick .x{background:none;color:var(--mute);font-weight:500;padding:7px 4px;font-size:12px}
 
-  .form{display:grid;grid-template-columns:1fr 92px;gap:6px;align-items:stretch}
+  .form{display:grid;grid-template-columns:1fr 128px;gap:6px;align-items:stretch}
   .form input,.form select{border:1px solid var(--line);border-radius:8px;padding:11px 12px;background:#fff;font-size:15px;min-width:0;color:var(--ink)}
   .form select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364707E'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
   .form input:focus,.form select:focus{outline:2px solid var(--grass);outline-offset:0;border-color:var(--grass)}
@@ -134,7 +134,7 @@
 
     <div class="form">
       <input id="nameIn" placeholder="Name" autocomplete="off" autocapitalize="words">
-      <input id="timeIn" placeholder="Time — e.g. 3:30pm" autocomplete="off">
+      <input id="timeIn" placeholder="Time — 3:30pm or 3-4:40pm" autocomplete="off">
       <select id="locIn" aria-label="Location"></select>
       <label class="chkrow"><input type="checkbox" id="coachChk">Coach priority</label>
       <input id="noteIn" class="note" placeholder="Note (optional) — e.g. hitting clinic" autocomplete="off">
@@ -242,54 +242,80 @@
   };
 
   /* ---------- TIME FORMATTING ----------
-     Everything typed into the Time box is normalized to "H:MM AM/PM".
-     Accepted: "3", "3pm", "3:30", "3:30 pm", "15:00", "12a", "12.30pm".
-     Bare numbers with no am/pm are guessed: 1–7 → PM, 8–11 → AM, 12 → PM
-     (lesson hours). Typing am/pm always wins over the guess.
-     Unrecognized text (e.g. "after practice") is kept as typed. */
+     The Time box takes a start time OR a range, and normalizes it:
+       "3"          -> 3:00 PM            "3:30pm"  -> 3:30 PM
+       "3-4:40pm"   -> 3:00-4:40 PM       "15:00"   -> 3:00 PM
+       "11-1pm"     -> 11:00 AM-1:00 PM   "3 to 5"  -> 3:00-5:00 PM
+     Bare numbers with no am/pm are guessed: 8-11 -> AM, everything else
+     -> PM (lesson hours); typing am/pm always wins, and a range's start
+     inherits the end's meridiem when sensible. Text that doesn't parse
+     (e.g. "after practice") is kept as typed. */
 
-  function formatTime(raw){
-    if (!raw) return '';
-    const s = String(raw).trim().toLowerCase().replace(/\./g, ':').replace(/\s+/g, '');
-    const m = s.match(/^(\d{1,2})(?::(\d{2}))?(a|am|p|pm)?$/);
-    if (!m) return String(raw).trim();
-    let h = parseInt(m[1], 10);
-    const min = m[2] ? parseInt(m[2], 10) : 0;
-    let ap = m[3] ? (m[3][0] === 'p' ? 'PM' : 'AM') : null;
-    if (min > 59 || h > 23) return String(raw).trim();
-    if (ap === null) {
-      if (h === 0) { h = 12; ap = 'AM'; }
-      else if (h > 12) { h -= 12; ap = 'PM'; }          // 24-hour input like 15:00
-      else if (h === 12) { ap = 'PM'; }
-      else if (h >= 8 && h <= 11) { ap = 'AM'; }        // morning lessons
-      else { ap = 'PM'; }                                // 1–7 → afternoon/evening
-    } else {
-      if (h === 0) h = 12;
-      if (h > 12) return String(raw).trim();            // "15pm" makes no sense
+  function parseClock(str){
+    const m = String(str).trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(a|am|p|pm)?$/i);
+    if (!m) return null;
+    const h = parseInt(m[1],10), min = m[2] ? parseInt(m[2],10) : 0;
+    if (min > 59 || h > 23) return null;
+    return { h, min, ap: m[3] ? (m[3][0].toLowerCase()==='p' ? 'PM' : 'AM') : null };
+  }
+  const guessAp = c => (c.h === 0 || (c.h >= 8 && c.h <= 11)) ? 'AM' : 'PM';
+  function clockMinutes(c, ap){
+    if (c.h > 12) return c.h * 60 + c.min;          // 24-hour input (13:00+)
+    let h = c.h % 12;
+    if ((ap || 'AM') === 'PM') h += 12;
+    return h * 60 + c.min;
+  }
+  const fmtMin = m => (((Math.floor(m/60)) % 12) || 12) + ':' + String(m % 60).padStart(2,'0');
+  const apOf = m => m >= 720 ? 'PM' : 'AM';
+
+  /* Returns { label, start, end|null } or null when the text is not a time. */
+  function parseTimeText(raw){
+    if (!raw) return null;
+    const parts = String(raw).trim().replace(/\s+/g,' ').split(/\s*(?:\u2013|\u2014|-|\bto\b)\s*/i).filter(Boolean);
+    if (parts.length < 1 || parts.length > 2) return null;
+    const c1 = parseClock(parts[0]);
+    if (!c1) return null;
+    if (parts.length === 1){
+      const ap = c1.h > 12 ? null : (c1.ap || guessAp(c1));
+      const start = clockMinutes(c1, ap);
+      return { label: fmtMin(start) + ' ' + apOf(start), start, end: null };
     }
-    return h + ':' + String(min).padStart(2, '0') + ' ' + ap;
+    const c2 = parseClock(parts[1]);
+    if (!c2) return null;
+    const ap2 = c2.h > 12 ? null : (c2.ap || c1.ap || guessAp(c2));
+    const end = clockMinutes(c2, ap2);
+    const ap1 = c1.h > 12 ? null : (c1.ap || ap2 || guessAp(c1));
+    let start = clockMinutes(c1, ap1);
+    if (start >= end && c1.h <= 12 && !c1.ap){       // "11-1pm": start flips to AM
+      const flipped = clockMinutes(c1, ap1 === 'PM' ? 'AM' : 'PM');
+      if (flipped < end) start = flipped;
+    }
+    if (start >= end) return null;
+    const label = apOf(start) === apOf(end)
+      ? fmtMin(start) + '\u2013' + fmtMin(end) + ' ' + apOf(end)
+      : fmtMin(start) + ' ' + apOf(start) + '\u2013' + fmtMin(end) + ' ' + apOf(end);
+    return { label, start, end };
   }
 
-  /* Minutes since midnight, for sorting. Untimed entries sort last;
-     unparseable text sorts just before them. */
-  function timeMinutes(t){
-    if (!t) return 1e5;
-    const m = String(t).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-    if (!m) return 1e5 - 1;
-    let h = parseInt(m[1], 10);
-    const min = m[2] ? parseInt(m[2], 10) : 0;
-    const ap = m[3] ? m[3].toLowerCase() : null;
-    if (ap === 'pm' && h !== 12) h += 12;
-    if (ap === 'am' && h === 12) h = 0;
-    return h * 60 + min;
+  const formatTime = raw => { const p = parseTimeText(raw); return p ? p.label : String(raw||'').trim(); };
+
+  /* Booking interval in minutes. A lone start time occupies LESSON_MINUTES. */
+  function entryInterval(e){
+    const p = parseTimeText(e.time);
+    if (!p) return null;
+    return { start: p.start, end: p.end != null ? p.end : p.start + LESSON_MINUTES };
   }
+
+  /* Start minute, for sorting. Untimed last; unparseable just before. */
+  const timeMinutes = t => { const p = parseTimeText(t); return p ? p.start : (t ? 1e5 - 1 : 1e5); };
   const byTime = (a, b) => timeMinutes(a.time) - timeMinutes(b.time);
 
   /* ---------- CONFLICT DETECTION ----------
-     Two entries clash when they name the same location (case-insensitive,
-     so "Cage 2" = "cage 2") and their times fall within LESSON_MINUTES of
-     each other. Entries with no location or no parseable time can't be
-     checked. Warnings never block a save — the manager decides. */
+     Two entries clash when they're at the same spot and their time
+     intervals overlap. Ranges ("3–4:40 PM") use their real span; a lone
+     start time is assumed to occupy LESSON_MINUTES. Entries with no
+     parseable time can't be checked. Warnings never block a save — the
+     manager decides. */
   const LESSON_MINUTES = 60;
   const normLoc = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -338,10 +364,10 @@
       const la = normLoc(a.loc), lb = normLoc(b.loc);
       if (la && lb && la !== lb) return false;      // unrecognized text only matches itself
     }
-    // Same spot (or a location missing on older entries): times decide.
-    const ta = timeMinutes(a.time), tb = timeMinutes(b.time);
-    if (ta >= 1e5 - 1 || tb >= 1e5 - 1) return false;
-    return Math.abs(ta - tb) < LESSON_MINUTES;
+    // Same spot (or a location missing on older entries): intervals decide.
+    const ia = entryInterval(a), ib = entryInterval(b);
+    if (!ia || !ib) return false;
+    return ia.start < ib.end && ib.start < ia.end;
   }
   const conflictsFor = (list, entry) => list.filter(x => x !== entry && entriesConflict(x, entry));
   const isPending = e => e && e.status === 'pending';   // no status (older entries) = confirmed
@@ -366,7 +392,7 @@
   function validateEntry(name, time, note, loc) {
     if (!name) return { field:'nameIn', msg:'Name is required' };
     if (name.length > CONFIG.validation.nameMaxLength) return { field:'nameIn', msg:`Name must be ${CONFIG.validation.nameMaxLength} characters or less` };
-    if (!time) return { field:'timeIn', msg:'Time is required — e.g. 3:30pm' };
+    if (!time) return { field:'timeIn', msg:'Time is required — e.g. 3:30pm or 3-4:40pm' };
     if (time.length > CONFIG.validation.timeMaxLength) return { field:'timeIn', msg:`Time must be ${CONFIG.validation.timeMaxLength} characters or less` };
     if (!loc) return { field:'locIn', msg:'Location is required — e.g. cage 2' };
     if (loc.length > CONFIG.validation.locMaxLength) return { field:'locIn', msg:`Location must be ${CONFIG.validation.locMaxLength} characters or less` };
