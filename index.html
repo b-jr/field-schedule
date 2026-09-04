@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Schedule</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --chalk:#F3EFE4; --grass:#2E6B3F; --grass-dk:#1F4D2E; --dirt:#C0713A;
+    --ink:#1B1F1A; --mute:#7A7F76; --line:#DCD6C6; --card:#FFFDF8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--chalk);color:var(--ink);font-family:Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+  input{font:inherit}
+
+  header{background:var(--grass-dk);color:var(--chalk);padding:14px 16px 12px;position:sticky;top:0;z-index:5}
+  .eyebrow{font-family:Oswald,"Arial Narrow",sans-serif;letter-spacing:.14em;text-transform:uppercase;font-size:11px;opacity:.75;display:flex;justify-content:space-between;align-items:center}
+  .status{font-size:10px;letter-spacing:.05em;text-transform:none;opacity:.85}
+  .status.err{color:#F3B8A8;opacity:1}
+  .monthrow{display:flex;align-items:center;justify-content:space-between;margin-top:2px}
+  .month{font-family:Oswald,"Arial Narrow",sans-serif;font-weight:700;font-size:30px;line-height:1;text-transform:uppercase;letter-spacing:.02em}
+  .nav{display:flex;gap:6px}
+  .nav button{width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.12);font-size:20px;line-height:1}
+  .nav button:active{background:rgba(255,255,255,.25)}
+  .today-btn{font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:12px;padding:0 10px;width:auto!important}
+
+  .banner{display:none;background:#8A3A2C;color:#fff;font-size:13px;line-height:1.4;padding:10px 16px}
+  .banner.show{display:block}
+
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:8px 6px 120px}
+  .dow{text-align:center;font-family:Oswald,sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);padding:4px 0 6px}
+  .day{background:var(--card);border:1px solid var(--line);border-radius:6px;min-height:82px;padding:4px 3px 3px;text-align:left;display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden}
+  .day.pad{background:transparent;border-color:transparent}
+  .day:active{background:#F7F1E2}
+  .day .num{font-family:Oswald,sans-serif;font-size:13px;font-weight:500;color:var(--mute);line-height:1}
+  .day.today .num{color:#fff;background:var(--dirt);border-radius:999px;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+  .day.has{border-color:var(--grass)}
+  .chip{font-size:10px;font-weight:600;line-height:1.15;padding:2px 4px;border-radius:3px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .more{font-size:10px;color:var(--mute);font-weight:600}
+  .day.weekend{background:#FBF8F0}
+
+  .scrim{position:fixed;inset:0;background:rgba(27,31,26,.45);opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);z-index:10;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+  .sheet.open{transform:translateY(0)}
+  .handle{width:40px;height:4px;background:var(--line);border-radius:2px;margin:10px auto 6px}
+  .sheet-head{padding:4px 18px 10px;border-bottom:2px solid var(--grass);display:flex;align-items:baseline;justify-content:space-between}
+  .sheet-title{font-family:Oswald,sans-serif;font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.02em}
+  .sheet-sub{font-size:12px;color:var(--mute)}
+  .close{font-size:22px;color:var(--mute);padding:4px 6px}
+  .sheet-body{overflow:auto;padding:12px 18px 24px}
+
+  .lineup{list-style:none;display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .lineup li{display:flex;align-items:center;gap:10px;background:var(--chalk);border-radius:8px;padding:9px 10px}
+  .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .lineup .who{font-weight:600;flex:1;min-width:0}
+  .lineup .who small{display:block;font-weight:400;color:var(--mute);font-size:12px}
+  .del{color:var(--mute);font-size:20px;padding:0 4px;line-height:1}
+  .empty{color:var(--mute);font-size:14px;padding:6px 0 14px}
+
+  .label{font-family:Oswald,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:6px 0 6px}
+  .quick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .quick button{padding:7px 12px;border-radius:999px;color:#fff;font-weight:600;font-size:13px}
+  .quick button:active{filter:brightness(.85)}
+  .quick .x{background:none;color:var(--mute);font-weight:500;padding:7px 4px;font-size:12px}
+
+  .form{display:grid;grid-template-columns:1fr 92px;gap:6px;align-items:stretch}
+  .form input{border:1px solid var(--line);border-radius:8px;padding:11px 12px;background:#fff;font-size:15px;min-width:0}
+  .form input:focus{outline:2px solid var(--grass);outline-offset:0;border-color:var(--grass)}
+  .form .note{grid-column:1 / -1}
+  .add{grid-column:1 / -1;background:var(--grass);color:#fff;border-radius:8px;padding:12px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:15px;font-weight:700}
+  .add:active{background:var(--grass-dk)}
+  .add[disabled]{opacity:.5;cursor:default}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--ink);color:var(--chalk);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:20;pointer-events:none}
+  .toast.show{opacity:1}
+  @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">
+    <span>Who's on the field</span>
+    <span class="status" id="status">connecting…</span>
+  </div>
+  <div class="monthrow">
+    <div class="month" id="monthLabel">—</div>
+    <div class="nav">
+      <button class="today-btn" id="todayBtn">Today</button>
+      <button id="prev" aria-label="Previous month">‹</button>
+      <button id="next" aria-label="Next month">›</button>
+    </div>
+  </div>
+</header>
+<div class="banner" id="banner"></div>
+
+<div class="grid" id="grid"></div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="handle"></div>
+  <div class="sheet-head">
+    <div>
+      <div class="sheet-title" id="sheetTitle">—</div>
+      <div class="sheet-sub" id="sheetSub"></div>
+    </div>
+    <button class="close" id="closeBtn" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="label">On the field</div>
+    <ul class="lineup" id="lineup"></ul>
+    <div class="empty" id="emptyMsg">Nobody scheduled yet. Tap a name below or add someone.</div>
+
+    <div class="label" id="quickLabel">Tap to add</div>
+    <div class="quick" id="quick"></div>
+
+    <div class="form">
+      <input id="nameIn" placeholder="Name" autocomplete="off" autocapitalize="words">
+      <input id="timeIn" placeholder="Time" autocomplete="off">
+      <input id="noteIn" class="note" placeholder="Note (optional) — e.g. hitting clinic, cage 2" autocomplete="off">
+      <button class="add" id="addBtn">Add to this day</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- =========================== FIREBASE SETUP ===========================
+1. https://console.firebase.google.com → create a free project.
+2. Add a Web app (</> icon) → copy the firebaseConfig values into
+   FIREBASE_CONFIG below.
+3. Build → Realtime Database → Create Database (any region, test mode is
+   fine to start — but then do step 4, because TEST MODE EXPIRES IN ~30
+   DAYS and the calendar will stop saving).
+4. Realtime Database → Rules tab → replace everything with:
+
+   {
+     "rules": {
+       ".read": false,
+       ".write": false,
+       "field-schedule": {
+         ".read": true,
+         ".write": true,
+         "entries": {
+           "$day": {
+             ".validate": "$day.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)"
+           }
+         }
+       }
+     }
+   }
+
+   These rules never expire. Only the field-schedule branch is open;
+   the rest of the database stays locked. Anyone who has the page URL
+   can view and edit the schedule, so share the link only with your
+   instructors and keep client phone numbers / personal info out of
+   the notes.
+====================================================================== -->
+<script type="module">
+  /* ---------- UI code first: the calendar always draws, even if Firebase
+     is misconfigured or unreachable. ---------- */
+
+  const $ = id => document.getElementById(id);
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const COLORS = ['#2E6B3F','#C0713A','#3B5BA5','#8A3B6B','#B8860B','#2A8C8C','#A33A3A','#5C6B2E','#6B4E9B','#B05A3C'];
+  const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+
+  let state = { entries: {}, people: [] };
+  let view = new Date(); view.setDate(1);
+  let selected = null;
+  let selectedDate = null;
+  let canSave = false;          // flips true once Firebase is connected
+  let todayKey = iso(new Date());
+
+  const setStatus = (text, isErr) => { const s=$('status'); s.textContent=text; s.classList.toggle('err', !!isErr); };
+  const showBanner = msg => { const b=$('banner'); b.textContent=msg; b.classList.add('show'); };
+  const hideBanner = () => $('banner').classList.remove('show');
+  function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  let tt; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),1600); }
+
+  /* Firebase strips empty arrays and can return arrays as {0:...,1:...}
+     objects. Normalize everything coming off the wire into real arrays. */
+  const asArray = v => v == null ? [] : (Array.isArray(v) ? v.filter(Boolean) : Object.values(v).filter(Boolean));
+  function normalize(raw){
+    const out = { entries: {}, people: asArray(raw && raw.people) };
+    const entries = (raw && raw.entries) || {};
+    for (const k of Object.keys(entries)) {
+      const list = asArray(entries[k]);
+      if (list.length) out.entries[k] = list;
+    }
+    return out;
+  }
+
+  function colorFor(name){
+    const p = state.people.find(p => p.name.toLowerCase() === name.toLowerCase());
+    return p ? p.color : COLORS[state.people.length % COLORS.length];
+  }
+
+  function render(){
+    todayKey = iso(new Date());
+    $('monthLabel').textContent = MONTHS[view.getMonth()]+' '+view.getFullYear();
+    const g = $('grid'); g.innerHTML = '';
+    DOW.forEach(d => { const el=document.createElement('div'); el.className='dow'; el.textContent=d; g.appendChild(el); });
+    const first = new Date(view.getFullYear(), view.getMonth(), 1);
+    const days = new Date(view.getFullYear(), view.getMonth()+1, 0).getDate();
+    for (let i=0;i<first.getDay();i++){ const p=document.createElement('div'); p.className='day pad'; g.appendChild(p); }
+    for (let d=1; d<=days; d++){
+      const date = new Date(view.getFullYear(), view.getMonth(), d);
+      const k = iso(date);
+      const list = state.entries[k] || [];
+      const b = document.createElement('button');
+      b.className = 'day'+(k===todayKey?' today':'')+(list.length?' has':'')+((date.getDay()===0||date.getDay()===6)?' weekend':'');
+      b.setAttribute('aria-label', MONTHS[date.getMonth()]+' '+d);
+      b.innerHTML = '<span class="num">'+d+'</span>';
+      list.slice(0,3).forEach(e => {
+        const c=document.createElement('span'); c.className='chip'; c.style.background=colorFor(e.name);
+        c.textContent=(e.time?e.time+' ':'')+e.name.split(' ')[0]; b.appendChild(c);
+      });
+      if (list.length>3){ const m=document.createElement('span'); m.className='more'; m.textContent='+'+(list.length-3)+' more'; b.appendChild(m); }
+      b.onclick = () => openDay(k, date);
+      g.appendChild(b);
+    }
+  }
+
+  function openDay(k, date){
+    selected = k; selectedDate = date;
+    $('sheetTitle').textContent = DOW[date.getDay()]+' '+MONTHS[date.getMonth()]+' '+date.getDate();
+    $('sheetSub').textContent = k===todayKey ? 'Today' : '';
+    renderSheet();
+    $('sheet').classList.add('open'); $('scrim').classList.add('open');
+  }
+  function closeSheet(){ $('sheet').classList.remove('open'); $('scrim').classList.remove('open'); selected=null; selectedDate=null; }
+
+  function renderSheet(){
+    const list = state.entries[selected] || [];
+    const ul = $('lineup'); ul.innerHTML='';
+    list.forEach((e) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="dot" style="background:'+colorFor(e.name)+'"></span><div class="who">'+esc(e.name)+
+        ((e.time||e.note)?'<small>'+esc([e.time,e.note].filter(Boolean).join(' · '))+'</small>':'')+'</div>';
+      const del = document.createElement('button'); del.className='del'; del.textContent='×'; del.setAttribute('aria-label','Remove '+e.name);
+      del.onclick = () => removeEntry(selected, e);
+      li.appendChild(del); ul.appendChild(li);
+    });
+    $('emptyMsg').style.display = list.length ? 'none' : 'block';
+
+    const q = $('quick'); q.innerHTML='';
+    state.people.forEach(p => {
+      const b=document.createElement('button'); b.style.background=p.color; b.textContent=p.name;
+      b.onclick = () => addEntry(p.name, $('timeIn').value.trim(), $('noteIn').value.trim());
+      q.appendChild(b);
+    });
+    if (state.people.length){
+      const x=document.createElement('button'); x.className='x'; x.textContent='edit names';
+      x.onclick = () => { const n=prompt('Type a name to remove from your quick list:'); if(!n) return; removePerson(n.trim()); };
+      q.appendChild(x);
+    }
+    $('quickLabel').style.display = state.people.length ? 'block' : 'none';
+  }
+
+  render(); // grid is on screen before any network work happens
+
+  /* Midnight rollover: if a tab stays open past midnight, re-render so the
+     "today" ring moves. Checked once a minute; also on tab re-focus. */
+  setInterval(() => { if (iso(new Date()) !== todayKey) render(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && iso(new Date()) !== todayKey) render(); });
+
+  /* ---------- Firebase ---------- */
+
+  // REPLACE with your project's config (Firebase console → Project settings)
+  const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  let dayRef = null, peopleRef = null, runTransaction = null;
+
+  if (Object.values(FIREBASE_CONFIG).some(v => typeof v === 'string' && v.startsWith('YOUR_'))) {
+    setStatus('not configured', true);
+    showBanner('Firebase config is missing — the calendar will display but nothing will save. Open this file and fill in FIREBASE_CONFIG (see the setup comment).');
+  } else {
+    initFirebase();
+  }
+
+  async function initFirebase(){
+    try {
+      const appMod = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js");
+      const dbMod  = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js");
+      runTransaction = dbMod.runTransaction;
+
+      const app = appMod.initializeApp(FIREBASE_CONFIG);
+      const db  = dbMod.getDatabase(app);
+      dayRef    = k => dbMod.ref(db, 'field-schedule/entries/' + k);
+      peopleRef = dbMod.ref(db, 'field-schedule/people');
+
+      // Live sync: any change by anyone updates every open page.
+      dbMod.onValue(dbMod.ref(db, 'field-schedule'), snap => {
+        state = normalize(snap.val());
+        hideBanner();
+        canSave = true;
+        render();
+        if (selected) renderSheet();
+        setStatus('synced');
+      }, err => {
+        console.error(err);
+        canSave = false;
+        if (err && String(err.message||err).toLowerCase().includes('permission')) {
+          setStatus('blocked', true);
+          showBanner('The database refused the connection (permission denied). This usually means test-mode rules expired — paste in the permanent rules from the setup comment in this file.');
+        } else {
+          setStatus('offline — retrying', true);
+        }
+      });
+
+      // Connection indicator (Firebase reconnects on its own).
+      dbMod.onValue(dbMod.ref(db, '.info/connected'), snap => {
+        if (snap.val() === true) { setStatus('synced'); }
+        else if (canSave) { setStatus('offline — changes will sync when back', true); }
+      });
+    } catch (e) {
+      console.error(e);
+      setStatus('setup error', true);
+      showBanner('Could not load or start Firebase — check FIREBASE_CONFIG values and your internet connection, then refresh.');
+    }
+  }
+
+  /* All writes are per-day transactions: two people editing at the same
+     moment can no longer wipe out each other's changes — Firebase replays
+     the losing write on top of the winner. People list is transactional
+     for the same reason. Nothing here ever writes outside its own path,
+     so one bad save can't clobber the whole schedule. */
+
+  function guardSave(){
+    if (!canSave){ toast('Not connected — change not saved'); return false; }
+    return true;
+  }
+
+  function addEntry(name, time, note){
+    if (!name){ $('nameIn').focus(); return; }
+    if (!selected || !guardSave()) return;
+    const entry = { name, time: time||'', note: note||'' };
+    ensurePerson(name);
+    runTransaction(dayRef(selected), current => {
+      const list = asArray(current);
+      list.push(entry);
+      list.sort((a,b) => (a.time||'zz').localeCompare(b.time||'zz'));
+      return list;
+    }).then(() => {
+      $('nameIn').value=''; $('timeIn').value=''; $('noteIn').value='';
+      toast(name+' added');
+    }).catch(e => { console.error(e); toast('Could not save — try again'); });
+  }
+
+  function removeEntry(k, entry){
+    if (!guardSave()) return;
+    runTransaction(dayRef(k), current => {
+      const list = asArray(current).filter(x =>
+        !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'')));
+      return list.length ? list : null;   // null deletes the empty day
+    }).catch(e => { console.error(e); toast('Could not remove — try again'); });
+  }
+
+  function ensurePerson(name){
+    if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
+    runTransaction(peopleRef, current => {
+      const list = asArray(current);
+      if (list.some(p => p.name.toLowerCase() === name.toLowerCase())) return list;
+      list.push({ name, color: COLORS[list.length % COLORS.length] });
+      return list;
+    }).catch(e => console.error(e));
+  }
+
+  function removePerson(name){
+    if (!guardSave()) return;
+    runTransaction(peopleRef, current => {
+      const list = asArray(current).filter(p => p.name.toLowerCase() !== name.toLowerCase());
+      return list.length ? list : null;
+    }).catch(e => console.error(e));
+  }
+
+  /* ---------- wiring ---------- */
+  $('addBtn').onclick = () => addEntry($('nameIn').value.trim(), $('timeIn').value.trim(), $('noteIn').value.trim());
+  $('nameIn').addEventListener('keydown', e => { if(e.key==='Enter') $('addBtn').click(); });
+  $('closeBtn').onclick = closeSheet; $('scrim').onclick = closeSheet;
+  $('prev').onclick = () => { view.setMonth(view.getMonth()-1); render(); };
+  $('next').onclick = () => { view.setMonth(view.getMonth()+1); render(); };
+  $('todayBtn').onclick = () => { view=new Date(); view.setDate(1); render(); };
+</script>
+</body>
+</html>
