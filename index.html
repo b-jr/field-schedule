@@ -44,7 +44,7 @@
 
   .scrim{position:fixed;inset:0;background:rgba(27,31,26,.45);opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
   .scrim.open{opacity:1;pointer-events:auto}
-  .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);z-index:10;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+  .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);z-index:10;max-height:85vh}
   .sheet.open{transform:translateY(0)}
   .handle{width:40px;height:4px;background:var(--line);border-radius:2px;margin:10px auto 6px}
   .sheet-head{padding:4px 18px 10px;border-bottom:2px solid var(--grass);display:flex;align-items:baseline;justify-content:space-between}
@@ -70,11 +70,12 @@
   .form{display:grid;grid-template-columns:1fr 92px;gap:6px;align-items:stretch}
   .form input{border:1px solid var(--line);border-radius:8px;padding:11px 12px;background:#fff;font-size:15px;min-width:0}
   .form input:focus{outline:2px solid var(--grass);outline-offset:0;border-color:var(--grass)}
+  .form input[aria-invalid="true"]{border-color:#F3B8A8;outline-color:#F3B8A8}
   .form .note{grid-column:1 / -1}
   .add{grid-column:1 / -1;background:var(--grass);color:#fff;border-radius:8px;padding:12px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:15px;font-weight:700}
   .add:active{background:var(--grass-dk)}
   .add[disabled]{opacity:.5;cursor:default}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--ink);color:var(--chalk);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:20;pointer-events:none}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--ink);color:var(--chalk);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;z-index:11}
   .toast.show{opacity:1}
   @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
 </style>
@@ -130,7 +131,7 @@
 <!-- =========================== FIREBASE SETUP ===========================
 1. https://console.firebase.google.com → create a free project.
 2. Add a Web app (</> icon) → copy the firebaseConfig values into
-   FIREBASE_CONFIG below.
+   FIREBASE_CONFIG below (or set as environment variables).
 3. Build → Realtime Database → Create Database (any region, test mode is
    fine to start — but then do step 4, because TEST MODE EXPIRES IN ~30
    DAYS and the calendar will stop saving).
@@ -159,30 +160,78 @@
    the notes.
 ====================================================================== -->
 <script type="module">
-  /* ---------- UI code first: the calendar always draws, even if Firebase
-     is misconfigured or unreachable. ---------- */
+  /* ---------- CONFIGURATION ---------- */
+  
+  const CONFIG = {
+    colors: ['#2E6B3F','#C0713A','#3B5BA5','#8A3B6B','#B8860B','#2A8C8C','#A33A3A','#5C6B2E','#6B4E9B','#B05A3C'],
+    months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+    daysOfWeek: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    validation: {
+      nameMaxLength: 100,
+      timeMaxLength: 20,
+      noteMaxLength: 200
+    },
+    firebase: {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBfp251mIc03Ah6jWNXh7V8Kn5kt4HbkTQ",
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "csuf-field-schedule.firebaseapp.com",
+      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://csuf-field-schedule-default-rtdb.firebaseio.com",
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "csuf-field-schedule",
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "csuf-field-schedule.firebasestorage.app",
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "440922836237",
+      appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:440922836237:web:fb4e32c96f265a80a5b444"
+    }
+  };
+
+  /* ---------- LOGGING ---------- */
+
+  const log = (level, msg, data) => {
+    const timestamp = new Date().toISOString();
+    const prefix = `[${timestamp}] ${level.toUpperCase()}`;
+    console.log(`${prefix}: ${msg}`, data || '');
+  };
+
+  /* ---------- UI HELPERS ---------- */
 
   const $ = id => document.getElementById(id);
-  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const COLORS = ['#2E6B3F','#C0713A','#3B5BA5','#8A3B6B','#B8860B','#2A8C8C','#A33A3A','#5C6B2E','#6B4E9B','#B05A3C'];
   const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-  let state = { entries: {}, people: [] };
-  let view = new Date(); view.setDate(1);
-  let selected = null;
-  let selectedDate = null;
-  let canSave = false;          // flips true once Firebase is connected
-  let todayKey = iso(new Date());
-
+  let toastTimeout;
   const setStatus = (text, isErr) => { const s=$('status'); s.textContent=text; s.classList.toggle('err', !!isErr); };
   const showBanner = msg => { const b=$('banner'); b.textContent=msg; b.classList.add('show'); };
   const hideBanner = () => $('banner').classList.remove('show');
-  function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  let tt; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),1600); }
+  const toast = m => {
+    const t=$('toast');
+    t.textContent=m;
+    t.classList.add('show');
+    clearTimeout(toastTimeout);
+    toastTimeout=setTimeout(()=>t.classList.remove('show'),1600);
+  };
 
-  /* Firebase strips empty arrays and can return arrays as {0:...,1:...}
-     objects. Normalize everything coming off the wire into real arrays. */
+  /* ---------- STATE ---------- */
+
+  let state = { entries: {}, people: [] };
+  let uiState = {
+    selected: null,
+    selectedDate: null,
+    view: (() => { const d = new Date(); d.setDate(1); return d; })(),
+    dayElementCache: new Map()
+  };
+  let canSave = false;
+  let todayKey = iso(new Date());
+
+  /* ---------- DATA VALIDATION ---------- */
+
+  function validateEntry(name, time, note) {
+    if (!name || name.length === 0) return 'Name is required';
+    if (name.length > CONFIG.validation.nameMaxLength) return `Name must be ${CONFIG.validation.nameMaxLength} characters or less`;
+    if (time && time.length > CONFIG.validation.timeMaxLength) return `Time must be ${CONFIG.validation.timeMaxLength} characters or less`;
+    if (note && note.length > CONFIG.validation.noteMaxLength) return `Note must be ${CONFIG.validation.noteMaxLength} characters or less`;
+    return null;
+  }
+
+  /* ---------- FIREBASE UTILITIES ---------- */
+
   const asArray = v => v == null ? [] : (Array.isArray(v) ? v.filter(Boolean) : Object.values(v).filter(Boolean));
   function normalize(raw){
     const out = { entries: {}, people: asArray(raw && raw.people) };
@@ -196,96 +245,154 @@
 
   function colorFor(name){
     const p = state.people.find(p => p.name.toLowerCase() === name.toLowerCase());
-    return p ? p.color : COLORS[state.people.length % COLORS.length];
+    return p ? p.color : CONFIG.colors[state.people.length % CONFIG.colors.length];
+  }
+
+  /* ---------- RENDERING HELPERS ---------- */
+
+  function createDayElement(d, date, k, list) {
+    const b = document.createElement('button');
+    b.className = 'day'+(k===todayKey?' today':'')+(list.length?' has':'')+((date.getDay()===0||date.getDay()===6)?' weekend':'');
+    b.setAttribute('aria-label', CONFIG.months[date.getMonth()]+' '+d);
+    b.innerHTML = '<span class="num">'+d+'</span>';
+    
+    list.slice(0,3).forEach(e => {
+      const c=document.createElement('span');
+      c.className='chip';
+      c.style.background=colorFor(e.name);
+      c.textContent=(e.time?e.time+' ':'')+e.name.split(' ')[0];
+      b.appendChild(c);
+    });
+    
+    if (list.length>3){
+      const m=document.createElement('span');
+      m.className='more';
+      m.textContent='+'+(list.length-3)+' more';
+      b.appendChild(m);
+    }
+    
+    b.onclick = () => openDay(k, date);
+    return b;
   }
 
   function render(){
     todayKey = iso(new Date());
-    $('monthLabel').textContent = MONTHS[view.getMonth()]+' '+view.getFullYear();
-    const g = $('grid'); g.innerHTML = '';
-    DOW.forEach(d => { const el=document.createElement('div'); el.className='dow'; el.textContent=d; g.appendChild(el); });
-    const first = new Date(view.getFullYear(), view.getMonth(), 1);
-    const days = new Date(view.getFullYear(), view.getMonth()+1, 0).getDate();
-    for (let i=0;i<first.getDay();i++){ const p=document.createElement('div'); p.className='day pad'; g.appendChild(p); }
+    $('monthLabel').textContent = CONFIG.months[uiState.view.getMonth()]+' '+uiState.view.getFullYear();
+    const g = $('grid');
+    g.innerHTML = '';
+    
+    CONFIG.daysOfWeek.forEach(d => {
+      const el=document.createElement('div');
+      el.className='dow';
+      el.textContent=d;
+      g.appendChild(el);
+    });
+    
+    const first = new Date(uiState.view.getFullYear(), uiState.view.getMonth(), 1);
+    const days = new Date(uiState.view.getFullYear(), uiState.view.getMonth()+1, 0).getDate();
+    
+    for (let i=0;i<first.getDay();i++){
+      const p=document.createElement('div');
+      p.className='day pad';
+      g.appendChild(p);
+    }
+    
     for (let d=1; d<=days; d++){
-      const date = new Date(view.getFullYear(), view.getMonth(), d);
+      const date = new Date(uiState.view.getFullYear(), uiState.view.getMonth(), d);
       const k = iso(date);
       const list = state.entries[k] || [];
-      const b = document.createElement('button');
-      b.className = 'day'+(k===todayKey?' today':'')+(list.length?' has':'')+((date.getDay()===0||date.getDay()===6)?' weekend':'');
-      b.setAttribute('aria-label', MONTHS[date.getMonth()]+' '+d);
-      b.innerHTML = '<span class="num">'+d+'</span>';
-      list.slice(0,3).forEach(e => {
-        const c=document.createElement('span'); c.className='chip'; c.style.background=colorFor(e.name);
-        c.textContent=(e.time?e.time+' ':'')+e.name.split(' ')[0]; b.appendChild(c);
-      });
-      if (list.length>3){ const m=document.createElement('span'); m.className='more'; m.textContent='+'+(list.length-3)+' more'; b.appendChild(m); }
-      b.onclick = () => openDay(k, date);
-      g.appendChild(b);
+      const dayEl = createDayElement(d, date, k, list);
+      uiState.dayElementCache.set(k, dayEl);
+      g.appendChild(dayEl);
     }
   }
 
   function openDay(k, date){
-    selected = k; selectedDate = date;
-    $('sheetTitle').textContent = DOW[date.getDay()]+' '+MONTHS[date.getMonth()]+' '+date.getDate();
+    uiState.selected = k;
+    uiState.selectedDate = date;
+    $('sheetTitle').textContent = CONFIG.daysOfWeek[date.getDay()]+' '+CONFIG.months[date.getMonth()]+' '+date.getDate();
     $('sheetSub').textContent = k===todayKey ? 'Today' : '';
     renderSheet();
-    $('sheet').classList.add('open'); $('scrim').classList.add('open');
+    $('sheet').classList.add('open');
+    $('scrim').classList.add('open');
   }
-  function closeSheet(){ $('sheet').classList.remove('open'); $('scrim').classList.remove('open'); selected=null; selectedDate=null; }
+
+  function closeSheet(){
+    $('sheet').classList.remove('open');
+    $('scrim').classList.remove('open');
+    uiState.selected=null;
+    uiState.selectedDate=null;
+  }
 
   function renderSheet(){
-    const list = state.entries[selected] || [];
-    const ul = $('lineup'); ul.innerHTML='';
+    const list = state.entries[uiState.selected] || [];
+    const ul = $('lineup');
+    ul.innerHTML='';
+    
     list.forEach((e) => {
       const li = document.createElement('li');
       li.innerHTML = '<span class="dot" style="background:'+colorFor(e.name)+'"></span><div class="who">'+esc(e.name)+
         ((e.time||e.note)?'<small>'+esc([e.time,e.note].filter(Boolean).join(' · '))+'</small>':'')+'</div>';
-      const del = document.createElement('button'); del.className='del'; del.textContent='×'; del.setAttribute('aria-label','Remove '+e.name);
-      del.onclick = () => removeEntry(selected, e);
-      li.appendChild(del); ul.appendChild(li);
+      const del = document.createElement('button');
+      del.className='del';
+      del.textContent='×';
+      del.setAttribute('aria-label','Remove '+e.name);
+      del.onclick = () => removeEntry(uiState.selected, e);
+      li.appendChild(del);
+      ul.appendChild(li);
     });
+    
     $('emptyMsg').style.display = list.length ? 'none' : 'block';
 
-    const q = $('quick'); q.innerHTML='';
+    const q = $('quick');
+    q.innerHTML='';
     state.people.forEach(p => {
-      const b=document.createElement('button'); b.style.background=p.color; b.textContent=p.name;
+      const b=document.createElement('button');
+      b.style.background=p.color;
+      b.textContent=p.name;
       b.onclick = () => addEntry(p.name, $('timeIn').value.trim(), $('noteIn').value.trim());
       q.appendChild(b);
     });
+    
     if (state.people.length){
-      const x=document.createElement('button'); x.className='x'; x.textContent='edit names';
-      x.onclick = () => { const n=prompt('Type a name to remove from your quick list:'); if(!n) return; removePerson(n.trim()); };
+      const x=document.createElement('button');
+      x.className='x';
+      x.textContent='edit names';
+      x.onclick = () => {
+        const n=prompt('Type a name to remove from your quick list:');
+        if(!n) return;
+        removePerson(n.trim());
+      };
       q.appendChild(x);
     }
     $('quickLabel').style.display = state.people.length ? 'block' : 'none';
   }
 
-  render(); // grid is on screen before any network work happens
+  render();
 
-  /* Midnight rollover: if a tab stays open past midnight, re-render so the
-     "today" ring moves. Checked once a minute; also on tab re-focus. */
-  setInterval(() => { if (iso(new Date()) !== todayKey) render(); }, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && iso(new Date()) !== todayKey) render(); });
+  /* Midnight rollover: re-render when tab regains focus if date changed */
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && iso(new Date()) !== todayKey) {
+      log('info', 'Date changed on refocus, re-rendering');
+      render();
+    }
+  });
 
-  /* ---------- Firebase ---------- */
+  window.addEventListener('focus', () => {
+    if (iso(new Date()) !== todayKey) {
+      log('info', 'Date changed on window focus, re-rendering');
+      render();
+    }
+  });
 
-  // REPLACE with your project's config (Firebase console → Project settings)
-  const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBfp251mIc03Ah6jWNXh7V8Kn5kt4HbkTQ",
-  authDomain: "csuf-field-schedule.firebaseapp.com",
-  databaseURL: "https://csuf-field-schedule-default-rtdb.firebaseio.com",
-  projectId: "csuf-field-schedule",
-  storageBucket: "csuf-field-schedule.firebasestorage.app",
-  messagingSenderId: "440922836237",
-  appId: "1:440922836237:web:fb4e32c96f265a80a5b444"
-};
+  /* ---------- FIREBASE ---------- */
 
   let dayRef = null, peopleRef = null, runTransaction = null;
 
-  if (Object.values(FIREBASE_CONFIG).some(v => typeof v === 'string' && v.startsWith('YOUR_'))) {
+  if (Object.values(CONFIG.firebase).some(v => typeof v === 'string' && v.startsWith('VITE_'))) {
     setStatus('not configured', true);
-    showBanner('Firebase config is missing — the calendar will display but nothing will save. Open this file and fill in FIREBASE_CONFIG (see the setup comment).');
+    showBanner('Firebase config is missing — the calendar will display but nothing will save. Set environment variables or update FIREBASE_CONFIG.');
+    log('error', 'Firebase config incomplete');
   } else {
     initFirebase();
   }
@@ -296,76 +403,120 @@
       const dbMod  = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js");
       runTransaction = dbMod.runTransaction;
 
-      const app = appMod.initializeApp(FIREBASE_CONFIG);
+      const app = appMod.initializeApp(CONFIG.firebase);
       const db  = dbMod.getDatabase(app);
       dayRef    = k => dbMod.ref(db, 'field-schedule/entries/' + k);
       peopleRef = dbMod.ref(db, 'field-schedule/people');
 
-      // Live sync: any change by anyone updates every open page.
       dbMod.onValue(dbMod.ref(db, 'field-schedule'), snap => {
         state = normalize(snap.val());
         hideBanner();
         canSave = true;
         render();
-        if (selected) renderSheet();
+        if (uiState.selected) renderSheet();
         setStatus('synced');
+        log('info', 'Synced with Firebase');
       }, err => {
-        console.error(err);
+        log('error', 'Firebase sync error', err);
         canSave = false;
         if (err && String(err.message||err).toLowerCase().includes('permission')) {
           setStatus('blocked', true);
-          showBanner('The database refused the connection (permission denied). This usually means test-mode rules expired — paste in the permanent rules from the setup comment in this file.');
+          showBanner('The database refused the connection (permission denied). Update Firebase rules from the setup comment.');
         } else {
           setStatus('offline — retrying', true);
         }
       });
 
-      // Connection indicator (Firebase reconnects on its own).
       dbMod.onValue(dbMod.ref(db, '.info/connected'), snap => {
         if (snap.val() === true) { setStatus('synced'); }
         else if (canSave) { setStatus('offline — changes will sync when back', true); }
       });
     } catch (e) {
-      console.error(e);
+      log('error', 'Firebase initialization failed', e);
       setStatus('setup error', true);
-      showBanner('Could not load or start Firebase — check FIREBASE_CONFIG values and your internet connection, then refresh.');
+      showBanner('Could not load Firebase — check config and connection, then refresh.');
     }
   }
 
-  /* All writes are per-day transactions: two people editing at the same
-     moment can no longer wipe out each other's changes — Firebase replays
-     the losing write on top of the winner. People list is transactional
-     for the same reason. Nothing here ever writes outside its own path,
-     so one bad save can't clobber the whole schedule. */
+  /* ---------- DATA OPERATIONS ---------- */
 
   function guardSave(){
-    if (!canSave){ toast('Not connected — change not saved'); return false; }
+    if (!canSave){
+      toast('Not connected — change not saved');
+      return false;
+    }
     return true;
   }
 
   function addEntry(name, time, note){
-    if (!name){ $('nameIn').focus(); return; }
-    if (!selected || !guardSave()) return;
+    const nameEl = $('nameIn');
+    const error = validateEntry(name, time, note);
+    
+    if (error) {
+      nameEl.setAttribute('aria-invalid', 'true');
+      nameEl.focus();
+      toast(error);
+      log('warn', 'Validation failed', { name, time, note, error });
+      return;
+    }
+    nameEl.removeAttribute('aria-invalid');
+
+    if (!uiState.selected || !guardSave()) return;
+
     const entry = { name, time: time||'', note: note||'' };
+    
+    // Optimistic update
+    if (!state.entries[uiState.selected]) state.entries[uiState.selected] = [];
+    state.entries[uiState.selected].push(entry);
+    renderSheet();
+    
     ensurePerson(name);
-    runTransaction(dayRef(selected), current => {
+    runTransaction(dayRef(uiState.selected), current => {
       const list = asArray(current);
-      list.push(entry);
+      if (!list.some(x => x === entry)) {
+        list.push(entry);
+      }
       list.sort((a,b) => (a.time||'zz').localeCompare(b.time||'zz'));
       return list;
     }).then(() => {
-      $('nameIn').value=''; $('timeIn').value=''; $('noteIn').value='';
+      $('nameIn').value='';
+      $('timeIn').value='';
+      $('noteIn').value='';
       toast(name+' added');
-    }).catch(e => { console.error(e); toast('Could not save — try again'); });
+      log('info', 'Entry added', { name, date: uiState.selected });
+    }).catch(e => {
+      log('error', 'Failed to add entry', { name, error: e });
+      // Revert optimistic update
+      if (state.entries[uiState.selected]) {
+        state.entries[uiState.selected] = state.entries[uiState.selected].filter(x => !(x.name === entry.name && x.time === entry.time && x.note === entry.note));
+        if (!state.entries[uiState.selected].length) delete state.entries[uiState.selected];
+        renderSheet();
+      }
+      toast('Could not save — try again');
+    });
   }
 
   function removeEntry(k, entry){
     if (!guardSave()) return;
+    
+    // Optimistic update
+    if (state.entries[k]) {
+      state.entries[k] = state.entries[k].filter(x =>
+        !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'')));
+      if (!state.entries[k].length) delete state.entries[k];
+      renderSheet();
+    }
+    
     runTransaction(dayRef(k), current => {
       const list = asArray(current).filter(x =>
         !(x.name===entry.name && (x.time||'')===(entry.time||'') && (x.note||'')===(entry.note||'')));
-      return list.length ? list : null;   // null deletes the empty day
-    }).catch(e => { console.error(e); toast('Could not remove — try again'); });
+      return list.length ? list : null;
+    }).catch(e => {
+      log('error', 'Failed to remove entry', { key: k, error: e });
+      toast('Could not remove — try again');
+      // Refresh sheet to restore removed item
+      renderSheet();
+    });
   }
 
   function ensurePerson(name){
@@ -373,26 +524,30 @@
     runTransaction(peopleRef, current => {
       const list = asArray(current);
       if (list.some(p => p.name.toLowerCase() === name.toLowerCase())) return list;
-      list.push({ name, color: COLORS[list.length % COLORS.length] });
+      list.push({ name, color: CONFIG.colors[list.length % CONFIG.colors.length] });
+      log('info', 'Person added to quick list', { name });
       return list;
-    }).catch(e => console.error(e));
+    }).catch(e => log('error', 'Failed to add person to quick list', { name, error: e }));
   }
 
   function removePerson(name){
     if (!guardSave()) return;
     runTransaction(peopleRef, current => {
       const list = asArray(current).filter(p => p.name.toLowerCase() !== name.toLowerCase());
+      log('info', 'Person removed from quick list', { name });
       return list.length ? list : null;
-    }).catch(e => console.error(e));
+    }).catch(e => log('error', 'Failed to remove person', { name, error: e }));
   }
 
-  /* ---------- wiring ---------- */
+  /* ---------- EVENT WIRING ---------- */
+
   $('addBtn').onclick = () => addEntry($('nameIn').value.trim(), $('timeIn').value.trim(), $('noteIn').value.trim());
   $('nameIn').addEventListener('keydown', e => { if(e.key==='Enter') $('addBtn').click(); });
-  $('closeBtn').onclick = closeSheet; $('scrim').onclick = closeSheet;
-  $('prev').onclick = () => { view.setMonth(view.getMonth()-1); render(); };
-  $('next').onclick = () => { view.setMonth(view.getMonth()+1); render(); };
-  $('todayBtn').onclick = () => { view=new Date(); view.setDate(1); render(); };
+  $('closeBtn').onclick = closeSheet;
+  $('scrim').onclick = closeSheet;
+  $('prev').onclick = () => { uiState.view.setMonth(uiState.view.getMonth()-1); render(); };
+  $('next').onclick = () => { uiState.view.setMonth(uiState.view.getMonth()+1); render(); };
+  $('todayBtn').onclick = () => { uiState.view=new Date(); uiState.view.setDate(1); render(); };
 </script>
 </body>
 </html>
